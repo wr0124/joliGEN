@@ -445,8 +445,8 @@ def define_D(
             net = UnetDiscriminator(
                 model_input_nc,
                 model_output_nc,
-                num_downs=7,
-                D_ngf=64, # the final conv has D_ngf*8=512 filter
+                num_downs=7,  # the number of downsamplings
+                ngf=64,  # the final conv has D_ngf*8=512 filter
                 norm_layer=norm_layer,
                 use_dropout=D_dropout,
             )
