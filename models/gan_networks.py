@@ -21,7 +21,6 @@ from .modules.resnet_architecture.resnet_generator import ResnetGenerator_attn
 from .modules.discriminators import NLayerDiscriminator
 from .modules.discriminators import PixelDiscriminator
 from .modules.discriminators import UnetDiscriminator
-from .modules.discriminators import UNet_discriminator_mha
 
 
 from .modules.classifiers import (
@@ -45,6 +44,10 @@ from .modules.unet_generator_attn.unet_generator_attn import (
     UNet as UNet_mha,
     UViT as UViT,
 )
+from .modules.unet_generator_attn.unet_discriminator_attn import (
+    UNet as UNet_discriminator_mha,
+)
+
 
 
 def define_G(
