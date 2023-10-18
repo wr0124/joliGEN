@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torchviz import make_dot
 
 # for FID
-from data.base_dataset import get_transform
+# from data.base_dataset import get_transform
 from util.diff_aug import DiffAugment
 from util.discriminator import DiscriminatorInfo
 
@@ -560,6 +560,44 @@ class BaseGanModel(BaseModel):
                 fake_name = "temporal_fake"
                 real_name = "temporal_real"
                 compute_every = self.opt.D_temporal_every
+
+            elif "unet" in discriminator_name:
+                loss_calculator = loss.DualDiscriminatorGANLoss(
+                    netD=getattr(self, "net" + discriminator_name),
+                    device=self.device,
+                    dataaug_APA_p=self.opt.dataaug_APA_p,
+                    dataaug_APA_target=self.opt.dataaug_APA_target,
+                    train_batch_size=self.opt.train_batch_size,
+                    dataaug_APA_nimg=self.opt.dataaug_APA_nimg,
+                    dataaug_APA_every=self.opt.dataaug_APA_every,
+                    dataaug_D_label_smooth=self.opt.dataaug_D_label_smooth,
+                    train_gan_mode=train_gan_mode,
+                    dataaug_APA=self.opt.dataaug_APA,
+                    dataaug_D_diffusion=dataaug_D_diffusion,
+                    dataaug_D_diffusion_every=dataaug_D_diffusion_every,
+                )
+                fake_name = None
+                real_name = None
+                compute_every = 1
+
+            elif "unet_discriminator_mha" in discriminator_name:
+                loss_calculator = loss.DualDiscriminatorGANLoss(
+                    netD=getattr(self, "net" + discriminator_name),
+                    device=self.device,
+                    dataaug_APA_p=self.opt.dataaug_APA_p,
+                    dataaug_APA_target=self.opt.dataaug_APA_target,
+                    train_batch_size=self.opt.train_batch_size,
+                    dataaug_APA_nimg=self.opt.dataaug_APA_nimg,
+                    dataaug_APA_every=self.opt.dataaug_APA_every,
+                    dataaug_D_label_smooth=self.opt.dataaug_D_label_smooth,
+                    train_gan_mode=train_gan_mode,
+                    dataaug_APA=self.opt.dataaug_APA,
+                    dataaug_D_diffusion=dataaug_D_diffusion,
+                    dataaug_D_diffusion_every=dataaug_D_diffusion_every,
+                )
+                fake_name = None
+                real_name = None
+                compute_every = 1
 
             else:
                 fake_name = None

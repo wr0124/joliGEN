@@ -21,6 +21,7 @@ from .modules.resnet_architecture.resnet_generator import ResnetGenerator_attn
 from .modules.discriminators import NLayerDiscriminator
 from .modules.discriminators import PixelDiscriminator
 from .modules.discriminators import UnetDiscriminator
+from .modules.discriminators import UNet_discriminator_mha
 
 
 from .modules.classifiers import (
@@ -272,6 +273,12 @@ def define_D(
     f_s_semantic_nclasses,
     model_depth_network,
     train_feat_wavelet,
+    ###########for UNet_discriminator_mha
+    G_unet_mha_num_head_channels,
+    G_unet_mha_res_blocks,
+    G_unet_mha_channel_mults,
+    G_unet_mha_norm_layer,
+    G_unet_mha_group_norm_size,
     **unused_options
 ):
 
@@ -441,7 +448,7 @@ def define_D(
             )
             return_nets[netD] = init_net(net, model_init_type, model_init_gain)
 
-        elif netD == "unet_128_d":
+        elif netD == "unet":
             net = UnetDiscriminator(
                 model_input_nc,
                 model_output_nc,
@@ -449,6 +456,25 @@ def define_D(
                 D_ngf,  # the final conv has D_ngf*8=512 filter
                 norm_layer=norm_layer,
                 use_dropout=D_dropout,
+            )
+            return_nets[netD] = init_net(net, model_init_type, model_init_gain)
+
+        elif netD == "unet_discriminator_mha":
+            net = UNet_discriminator_mha(
+                image_size=data_crop_size,
+                in_channel=model_input_nc,
+                inner_channel=D_ndf,
+                cond_embed_dim=D_ndf * 4,
+                out_channel=model_output_nc,
+                res_blocks=G_unet_mha_res_blocks,
+                attn_res=[16],
+                channel_mults=G_unet_mha_channel_mults,  # e.g. (1, 2, 4, 8)
+                num_head_channels=G_unet_mha_num_head_channels,
+                tanh=True,
+                n_timestep_train=0,  # unused
+                n_timestep_test=0,  # unused
+                norm=G_unet_mha_norm_layer,
+                group_norm_size=G_unet_mha_group_norm_size,
             )
             return_nets[netD] = init_net(net, model_init_type, model_init_gain)
 
