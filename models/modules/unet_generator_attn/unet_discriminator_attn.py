@@ -4,7 +4,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import sys
 import numpy as np
 
 from einops import rearrange
@@ -573,7 +573,14 @@ class UNet(nn.Module):
             ),
         )
         self._feature_size += ch
-
+        self.bottleneck_conv = nn.Conv2d(
+            self.inner_channel * channel_mults[-1],
+            2,
+            kernel_size=2,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mults))[::-1]:
             for i in range(res_blocks[level] + 1):
@@ -676,8 +683,12 @@ class UNet(nn.Module):
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
-        outh_encoder = nn.Tanh()(h)
+
+        bottleneck_conv = self.bottleneck_conv(h)
+        outh_encoder = nn.Tanh()(bottleneck_conv)
+
         outs, feats = h, hs
+
         return outs, feats, emb, outh_encoder
 
     def forward(self, input, embed_gammas=None):
@@ -1603,7 +1614,7 @@ class UNetGeneratorRefAttn(nn.Module):
         return outs, feats, emb, h_ref, hs_ref
 
     def forward(self, input, embed_gammas=None, ref=None):
-        h, hs, emb, h_ref, hs_ref= self.compute_feats(
+        h, hs, emb, h_ref, hs_ref = self.compute_feats(
             input, embed_gammas=embed_gammas, ref=ref
         )
 
@@ -1631,7 +1642,7 @@ class UNetGeneratorRefAttn(nn.Module):
         return outh
 
     def get_feats(self, input, extract_layer_ids):
-        _, hs, _, _, _ ,_ = self.compute_feats(input, embed_gammas=None)
+        _, hs, _, _, _, _ = self.compute_feats(input, embed_gammas=None)
         feats = []
 
         for i, feat in enumerate(hs):
