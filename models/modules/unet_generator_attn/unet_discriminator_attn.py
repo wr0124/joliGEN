@@ -685,6 +685,11 @@ class UNet(nn.Module):
         h = self.middle_block(h, emb)
 
         bottleneck_conv = self.bottleneck_conv(h)
+        print(
+            "shape of the bottleneck_conv before nn.Tanh {}".format(
+                bottleneck_conv.shape
+            )
+        )
         outh_encoder = nn.Tanh()(bottleneck_conv)
 
         outs, feats = h, hs
