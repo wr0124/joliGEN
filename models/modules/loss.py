@@ -5,7 +5,39 @@ import torch.nn.functional as F
 import random
 import math
 
-# import numpy as np
+#####################star of the cutmix
+import torch
+import numpy as np
+
+# Define the CutMix function and its supporting function
+def random_boundingbox(size, lam):
+    width, height = size, size
+    r = np.sqrt(1. - lam)
+    w = int(width * r)  # Modified this line
+    h = int(height * r)  # And this line
+    x = np.random.randint(width)
+    y = np.random.randint(height)
+    x1 = np.clip(x - w // 2, 0, width)
+    y1 = np.clip(y - h // 2, 0, height)
+    x2 = np.clip(x + w // 2, 0, width)
+    y2 = np.clip(y + h // 2, 0, height)
+    return x1, y1, x2, y2
+
+
+def CutMix(imsize):
+    lam = np.random.beta(1,1)
+    x1, y1, x2, y2 = random_boundingbox(imsize, lam)
+    lam = 1 - ((x2 - x1) * (y2 - y1) / (imsize * imsize))
+    mask = torch.ones((imsize, imsize))
+    mask[x1:x2, y1:y2] = 0
+    if torch.rand(1) > 0.5:
+        mask = 1 - mask
+    return mask
+
+
+#####################end of the cutmix
+
+
 
 
 class GANLoss(nn.Module):
@@ -457,11 +489,30 @@ class DualDiscriminatorGANLoss(DiscriminatorLoss):
         self.loss_D_real = loss_pred_real_pixel + loss_pred_real_bottleneck
 
         # Fake
-        lambda_loss = 0.5
-        pred_fake_pixel, pred_fake_bottleneck = netD(self.fake.detach())
-        loss_D_fake_pixel = self.criterionGAN(pred_fake_pixel, False)
-        loss_D_fake_bottleneck = self.criterionGAN(pred_fake_bottleneck, False)
+        lambda_loss = 0.5        
+        print( "real {} and fake {} shape ".format(self.real.shape, self.fake.shape)) 
+        def cutmix_real_fake_pairwise(real, fake):
+            assert self.real.size() == self.fake.size(), "Real and fake images should have the same dimensions."
+    
+            masks = torch.stack([CutMix(self.real.size(2)).to(self.real.device) for _ in range(self.real.size(0))])
+            masks = masks.unsqueeze(1)  # Adding the channel dimension
+            mixed_images = masks * real + (1 - masks) * fake
+    
+            return mixed_images, masks
 
+        cutmix_img, label_masks = cutmix_real_fake_pairwise(self.real, self.fake)
+        print("after cutmix !!!!!!!!!!!!!!!")
+        fake_input = cutmix_img.detach()
+        pixel_label = label_masks
+        pred_fake_pixel, pred_fake_bottleneck = netD(fake_input)
+        print(  )
+        self.criterionMSE = torch.nn.MSELoss().to(self.device)
+        loss_D_fake_pixel = self.criterionMSE(pred_fake_pixel, pixel_label)
+        print(" the loss_D_fake_pixel {}".format(loss_D_fake_pixel))
+
+
+        loss_D_fake_bottleneck = self.criterionGAN(pred_fake_bottleneck, False)
+        print(" the loss_fake_bottleneck is {}".format( loss_D_fake_bottleneck))
         loss_D_fake = loss_D_fake_bottleneck + loss_D_fake_pixel
 
         # Combined loss and calculate gradients

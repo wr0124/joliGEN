@@ -286,14 +286,17 @@ class UnetSkipConnectionBlock(nn.Module):
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
         self.innermost = innermost
-        self.bottleneck_conv_cor2 = nn.Conv2d(
-            inner_nc, outer_nc, kernel_size=2, stride=1, padding=0, bias=True
-        )
-        self.bottleneck_conv_cor1 = nn.Conv2d(
-            inner_nc, outer_nc, kernel_size=1, stride=1, padding=0, bias=True
-        )
-        self.flatten = nn.Flatten()
-        self.tanh = nn.Tanh()
+
+        # Move the bottleneck conv layers initialization to innermost condition
+        if self.innermost:
+            self.bottleneck_conv_cor2 = nn.Conv2d(
+                inner_nc, outer_nc, kernel_size=2, stride=1, padding=0, bias=True
+            )
+            self.bottleneck_conv_cor1 = nn.Conv2d(
+                inner_nc, outer_nc, kernel_size=1, stride=1, padding=0, bias=True
+            )
+
+            self.tanh = nn.Tanh()
 
         if type(norm_layer) == functools.partial:
             use_bias = norm_layer.func == nn.InstanceNorm2d
