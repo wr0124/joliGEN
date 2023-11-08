@@ -35,7 +35,7 @@ models_nosemantic = [
 D_netDs = [
     ["projected_d", "basic"],
     ["projected_d", "basic", "depth"],
-    ["projected_d", "basic", "unet_128_d"],
+    ["projected_d", "basic", "unet"],
 ]
 
 train_feat_wavelet = [False, True]

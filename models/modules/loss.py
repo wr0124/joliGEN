@@ -4,40 +4,12 @@ from torch import nn as nn
 import torch.nn.functional as F
 import random
 import math
-
-#####################star of the cutmix
+import visdom
+import time
 import torch
 import numpy as np
-
-# Define the CutMix function and its supporting function
-def random_boundingbox(size, lam):
-    width, height = size, size
-    r = np.sqrt(1. - lam)
-    w = int(width * r)  # Modified this line
-    h = int(height * r)  # And this line
-    x = np.random.randint(width)
-    y = np.random.randint(height)
-    x1 = np.clip(x - w // 2, 0, width)
-    y1 = np.clip(y - h // 2, 0, height)
-    x2 = np.clip(x + w // 2, 0, width)
-    y2 = np.clip(y + h // 2, 0, height)
-    return x1, y1, x2, y2
-
-
-def CutMix(imsize):
-    lam = np.random.beta(1,1)
-    x1, y1, x2, y2 = random_boundingbox(imsize, lam)
-    lam = 1 - ((x2 - x1) * (y2 - y1) / (imsize * imsize))
-    mask = torch.ones((imsize, imsize))
-    mask[x1:x2, y1:y2] = 0
-    if torch.rand(1) > 0.5:
-        mask = 1 - mask
-    return mask
-
-
-#####################end of the cutmix
-
-
+from PIL import Image
+from util.cutmix import CutMix
 
 
 class GANLoss(nn.Module):
@@ -271,7 +243,6 @@ class DiscriminatorLoss(nn.Module):
 
     def compute_loss_G(self, netD, real, fake):
         self.real = real
-        print()
         self.fake = fake
 
     def update(self, niter):
@@ -470,6 +441,206 @@ class DualDiscriminatorGANLoss(DiscriminatorLoss):
             self.gan_mode, target_real_label=target_real_label
         ).to(self.device)
 
+        self.viz = visdom.Visdom(
+            env="horse2zebra_mha_cutmix"
+        )  # rename the env to match the visdom environment name
+        self.viz_window_cutmix = None
+        self.viz_window = None
+        self.iters = 0
+
+    def plot_loss_nocutmix(
+        self,
+        loss_D_pixel,
+        loss_D_bottleneck,
+        loss_pred_real_pixel,
+        loss_pred_real_bottleneck,
+        loss_D_fake_pixel,
+        loss_D_fake_bottleneck,
+    ):
+        loss_D_pixel = (
+            loss_D_pixel.cpu().detach().numpy()
+            if loss_D_pixel.is_cuda
+            else loss_D_pixel.numpy()
+        )
+        loss_D_bottleneck = (
+            loss_D_bottleneck.cpu().detach().numpy()
+            if loss_D_bottleneck.is_cuda
+            else loss_D_bottleneck.numpy()
+        )
+        loss_pred_real_pixel = (
+            loss_pred_real_pixel.cpu().detach().numpy()
+            if loss_pred_real_pixel.is_cuda
+            else loss_pred_real_pixel.numpy()
+        )
+        loss_pred_real_bottleneck = (
+            loss_pred_real_bottleneck.cpu().detach().numpy()
+            if loss_pred_real_bottleneck.is_cuda
+            else loss_pred_real_bottleneck.numpy()
+        )
+        loss_D_fake_pixel = (
+            loss_D_fake_pixel.cpu().detach().numpy()
+            if loss_D_fake_pixel.is_cuda
+            else loss_D_fake_pixel.numpy()
+        )
+        loss_D_fake_bottleneck = (
+            loss_D_fake_bottleneck.cpu().detach().numpy()
+            if loss_D_fake_bottleneck.is_cuda
+            else loss_D_fake_bottleneck.numpy()
+        )
+        if self.viz_window is None:
+            self.viz_window = self.viz.line(
+                Y=[
+                    [
+                        loss_D_pixel,
+                        loss_D_bottleneck,
+                        loss_pred_real_pixel,
+                        loss_pred_real_bottleneck,
+                        loss_D_fake_pixel,
+                        loss_D_fake_bottleneck,
+                    ]
+                ],
+                X=[self.iters],
+                opts=dict(
+                    title="D_loss",
+                    legend=[
+                        "pixel",
+                        "bottleneck",
+                        "real_pixel",
+                        "real_bottleneck",
+                        "fake_pixel",
+                        "fake_bottleneck",
+                    ],
+                ),
+            )
+        else:
+            self.viz.line(
+                Y=[
+                    [
+                        loss_D_pixel,
+                        loss_D_bottleneck,
+                        loss_pred_real_pixel,
+                        loss_pred_real_bottleneck,
+                        loss_D_fake_pixel,
+                        loss_D_fake_bottleneck,
+                    ]
+                ],
+                X=[self.iters],
+                win=self.viz_window,
+                update="append",
+            )
+
+        self.iters += 1
+
+    def plot_loss_cutmix(
+        self,
+        loss_D_pixel,
+        loss_D_bottleneck,
+        loss_pred_real_pixel,
+        loss_pred_real_bottleneck,
+        loss_D_fake_pixel,
+        loss_D_fake_bottleneck,
+        loss_cutmix_pixel,
+    ):
+        loss_D_pixel = (
+            loss_D_pixel.cpu().detach().numpy()
+            if loss_D_pixel.is_cuda
+            else loss_D_pixel.numpy()
+        )
+        loss_D_bottleneck = (
+            loss_D_bottleneck.cpu().detach().numpy()
+            if loss_D_bottleneck.is_cuda
+            else loss_D_bottleneck.numpy()
+        )
+        loss_pred_real_pixel = (
+            loss_pred_real_pixel.cpu().detach().numpy()
+            if loss_pred_real_pixel.is_cuda
+            else loss_pred_real_pixel.numpy()
+        )
+        loss_pred_real_bottleneck = (
+            loss_pred_real_bottleneck.cpu().detach().numpy()
+            if loss_pred_real_bottleneck.is_cuda
+            else loss_pred_real_bottleneck.numpy()
+        )
+        loss_D_fake_pixel = (
+            loss_D_fake_pixel.cpu().detach().numpy()
+            if loss_D_fake_pixel.is_cuda
+            else loss_D_fake_pixel.numpy()
+        )
+        loss_D_fake_bottleneck = (
+            loss_D_fake_bottleneck.cpu().detach().numpy()
+            if loss_D_fake_bottleneck.is_cuda
+            else loss_D_fake_bottleneck.numpy()
+        )
+        loss_cutmix_pixel = (
+            loss_cutmix_pixel.cpu().detach().numpy()
+            if loss_cutmix_pixel.is_cuda
+            else loss_cutmix_pixel.numpy()
+        )
+        if self.viz_window_cutmix is None:
+            self.viz_window_cutmix = self.viz.line(
+                Y=[
+                    [
+                        loss_D_pixel,
+                        loss_D_bottleneck,
+                        loss_pred_real_pixel,
+                        loss_pred_real_bottleneck,
+                        loss_D_fake_pixel,
+                        loss_D_fake_bottleneck,
+                        loss_cutmix_pixel,
+                    ]
+                ],
+                X=[self.iters],
+                opts=dict(
+                    title="D_loss",
+                    legend=[
+                        "pixel",
+                        "bottleneck",
+                        "real_pixel",
+                        "real_bottleneck",
+                        "fake_pixel",
+                        "fake_bottleneck",
+                        "cutmix",
+                    ],
+                ),
+            )
+        else:
+            self.viz.line(
+                Y=[
+                    [
+                        loss_D_pixel,
+                        loss_D_bottleneck,
+                        loss_pred_real_pixel,
+                        loss_pred_real_bottleneck,
+                        loss_D_fake_pixel,
+                        loss_D_fake_bottleneck,
+                        loss_cutmix_pixel,
+                    ]
+                ],
+                X=[self.iters],
+                win=self.viz_window_cutmix,
+                update="append",
+            )
+
+        self.iters += 1
+
+    def plot_cutmix(self, real, fake, cutmix_img):
+        for i in range(real.size(0)):
+            windom_id = "cutmix_figure_batch_{}".format(i)
+            self.viz.close(win=windom_id)
+            combined = torch.cat((real[i], fake[i], cutmix_img[i]), 2)
+            combined = (combined - combined.min()) / (combined.max() - combined.min())
+
+            combined = combined.cpu().detach().numpy().transpose(1, 2, 0)
+            combined = (combined * 255).astype(np.uint8)
+            self.viz.image(
+                combined.transpose(2, 0, 1),
+                opts=dict(
+                    title="Batch {}".format(i + 1), caption="Real | Fake | Cutmix"
+                ),
+                win=windom_id,
+            )
+            time.sleep(5)
+
     def compute_loss_D(self, netD, real, fake, fake_2):
         """Calculate GAN loss for the discriminator
         Parameters:
@@ -489,62 +660,97 @@ class DualDiscriminatorGANLoss(DiscriminatorLoss):
         self.loss_D_real = loss_pred_real_pixel + loss_pred_real_bottleneck
 
         # Fake
-        lambda_loss = 0.5        
-        print( "real {} and fake {} shape ".format(self.real.shape, self.fake.shape)) 
+
+        lambda_loss = 0.5
+
         def cutmix_real_fake_pairwise(real, fake):
-            assert self.real.size() == self.fake.size(), "Real and fake images should have the same dimensions."
-    
-            masks = torch.stack([CutMix(self.real.size(2)).to(self.real.device) for _ in range(self.real.size(0))])
+            assert (
+                self.real.size() == self.fake.size()
+            ), "Real and fake images should have the same dimensions."
+            masks = torch.stack(
+                [
+                    CutMix(self.real.size(2)).to(self.real.device)
+                    for _ in range(self.real.size(0))
+                ]
+            )
             masks = masks.unsqueeze(1)  # Adding the channel dimension
-            mixed_images = masks * real + (1 - masks) * fake
-    
+            mixed_images = masks * fake + (1 - masks) * real
             return mixed_images, masks
 
-        cutmix_img, label_masks = cutmix_real_fake_pairwise(self.real, self.fake)
-        print("after cutmix !!!!!!!!!!!!!!!")
-        fake_input = cutmix_img.detach()
-        pixel_label = label_masks
-        pred_fake_pixel, pred_fake_bottleneck = netD(fake_input)
-        print(  )
-        self.criterionMSE = torch.nn.MSELoss().to(self.device)
-        loss_D_fake_pixel = self.criterionMSE(pred_fake_pixel, pixel_label)
-        print(" the loss_D_fake_pixel {}".format(loss_D_fake_pixel))
+        train_use_cutmix = True  # change this into True to use cutmix
 
+        if train_use_cutmix:
+            lambda_cutmix = 0.5
+            fake_input = self.fake.detach()
+            pred_fake_pixel, pred_fake_bottleneck = netD(fake_input)
 
-        loss_D_fake_bottleneck = self.criterionGAN(pred_fake_bottleneck, False)
-        print(" the loss_fake_bottleneck is {}".format( loss_D_fake_bottleneck))
-        loss_D_fake = loss_D_fake_bottleneck + loss_D_fake_pixel
+            cutmix_img, label_masks = cutmix_real_fake_pairwise(self.real, fake_input)
+            fake_cutmix_input = cutmix_img.detach()
+            pred_cutmix_fake_pixel, pred_cutmix_fake_bottleneck = netD(
+                fake_cutmix_input
+            )
+            cutmix_pixel_label = label_masks.repeat(1, 3, 1, 1)
 
-        # Combined loss and calculate gradients
-        loss_D = (self.loss_D_real + loss_D_fake) * lambda_loss
+            consistent_pred_pixel = torch.mul(
+                pred_fake_pixel, 1 - cutmix_pixel_label
+            ) + torch.mul(pred_real_pixel, cutmix_pixel_label)
+            loss_cutmix_pixel = (
+                torch.norm(pred_cutmix_fake_pixel - consistent_pred_pixel, p=2) ** 2
+            )
 
-        ##########print the two difference loss value
-        loss_D_pixel = loss_D_fake_pixel + loss_pred_real_pixel
-        loss_D_bottleneck = loss_D_fake_bottleneck + loss_pred_real_bottleneck
+            loss_D_fake_pixel = self.criterionGAN(pred_fake_pixel, False)
+            loss_D_fake_bottleneck = self.criterionGAN(pred_fake_bottleneck, False)
+            loss_D_fake = loss_D_fake_bottleneck + loss_D_fake_pixel
+            loss_D = (
+                self.loss_D_real + loss_D_fake
+            ) * lambda_loss + loss_cutmix_pixel * lambda_cutmix
 
-        print("loss.py D loss of the pixel(decoder)  is {}".format(loss_D_pixel))
-        print(
-            "loss.py D loss of the bottleneck(encoder)  is {}".format(loss_D_bottleneck)
-        )
+            loss_D_pixel = loss_D_fake_pixel + loss_pred_real_pixel
+            loss_D_bottleneck = loss_D_fake_bottleneck + loss_pred_real_bottleneck
+
+            self.plot_cutmix(self.real, self.fake, cutmix_img)
+            self.plot_loss_cutmix(
+                loss_D_pixel,
+                loss_D_bottleneck,
+                loss_pred_real_pixel,
+                loss_pred_real_bottleneck,
+                loss_D_fake_pixel,
+                loss_D_fake_bottleneck,
+                loss_cutmix_pixel,
+            )
+
+        else:
+            fake_input = self.fake.detach()
+            pred_fake_pixel, pred_fake_bottleneck = netD(fake_input)
+
+            loss_D_fake_pixel = self.criterionGAN(pred_fake_pixel, False)
+            loss_D_fake_bottleneck = self.criterionGAN(pred_fake_bottleneck, False)
+            loss_D_fake = loss_D_fake_bottleneck + loss_D_fake_pixel
+            loss_D = (self.loss_D_real + loss_D_fake) * lambda_loss
+
+            loss_D_pixel = loss_D_fake_pixel + loss_pred_real_pixel
+            loss_D_bottleneck = loss_D_fake_bottleneck + loss_pred_real_bottleneck
+
+            self.plot_loss_nocutmix(
+                loss_D_pixel,
+                loss_D_bottleneck,
+                loss_pred_real_pixel,
+                loss_pred_real_bottleneck,
+                loss_D_fake_pixel,
+                loss_D_fake_bottleneck,
+            )
 
         return loss_D
 
     def compute_loss_G(self, netD, real, fake):
 
         super().compute_loss_G(netD, real, fake)
-        print("net D here is {}".format(type(netD)))
         pred_fake_pixel, pred_fake_bottleneck = netD(self.fake)
 
         loss_G_pixel = self.criterionGAN(pred_fake_pixel, True, relu=False)
         loss_G_bottleneck = self.criterionGAN(pred_fake_bottleneck, True, relu=False)
-        ##############print the two difference loss values
 
         loss_D_fake = loss_G_pixel + loss_G_bottleneck
-
-        print("loss.py G loss of the pixel(decoder)  is {}".format(loss_G_pixel))
-        print(
-            "loss.py G loss of the bottleneck(encoder)  is {}".format(loss_G_bottleneck)
-        )
         return loss_D_fake
 
 

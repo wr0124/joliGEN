@@ -49,7 +49,6 @@ from .modules.unet_generator_attn.unet_discriminator_attn import (
 )
 
 
-
 def define_G(
     model_input_nc,
     model_output_nc,
@@ -479,7 +478,7 @@ def define_D(
                 norm=G_unet_mha_norm_layer,
                 group_norm_size=G_unet_mha_group_norm_size,
             )
-            return_nets[netD] = init_net(net, model_init_type, model_init_gain)
+            return_nets[netD] = net  # init_net(net, model_init_type, model_init_gain)
 
         else:
             raise NotImplementedError(

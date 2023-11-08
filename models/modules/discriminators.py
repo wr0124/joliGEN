@@ -295,7 +295,6 @@ class UnetSkipConnectionBlock(nn.Module):
             self.bottleneck_conv_cor1 = nn.Conv2d(
                 inner_nc, outer_nc, kernel_size=1, stride=1, padding=0, bias=True
             )
-
             self.tanh = nn.Tanh()
 
         if type(norm_layer) == functools.partial:
@@ -371,4 +370,3 @@ class UnetSkipConnectionBlock(nn.Module):
             output = torch.cat([x, output], 1)
 
         return output, return_feats, output_encoder_inside
-
