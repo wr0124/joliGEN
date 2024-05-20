@@ -694,6 +694,12 @@ class TrainOptions(CommonOptions):
             )
 
         # vitclip16 projector only works with input size 224
+        if opt.D_proj_network_type == "efficientnet":
+            if opt.D_proj_interp < 224:
+                warnings.warn(
+                    "Efficiennet projector has minimal input size of 224, setting D_proj_interp to 224"
+                )
+                opt.D_proj_interp = 224
         if opt.D_proj_network_type == "vitclip16":
             if opt.D_proj_interp != 224:
                 warnings.warn(
@@ -745,7 +751,12 @@ class TrainOptions(CommonOptions):
             ):
                 raise ValueError("SAM with masks and bbox prompting requires Pytorch 2")
         if opt.f_s_net == "sam" and opt.data_dataset_mode == "unaligned_labeled_mask":
-            raise warning.warn("SAM with direct masks does not use mask/bbox prompting")
+            warnings.warn("SAM with direct masks does not use mask/bbox prompting")
+
+        # no EMA with turbo finetuning
+        if opt.train_G_ema and opt.G_netG == "img2img_turbo":
+            warnings.warn("EMA not compatible with turbo finetuning")
+            opt.train_G_ema = False
 
         self.opt = opt
 
