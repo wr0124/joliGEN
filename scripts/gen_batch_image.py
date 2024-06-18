@@ -32,6 +32,10 @@ def main(args):
             prompt,
             "--gpuid",
             str(args.gpuid),
+            "--img_width",
+            str(args.img_width),
+            "--img_height",
+            str(args.img_height),
         ]
         if args.compare:
             cmd.append("--compare")
@@ -60,6 +64,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to compare original and generated images",
     )
+    parser.add_argument(
+        "--img_width",
+        type=int,
+        default=256,
+        help="image width, defatus to model crop sizes",
+    )
+    parser.add_argument(
+        "--img_height",
+        type=int,
+        default=256,
+        help="image width, defatus to model crop sizes",
+    )
+
     args = parser.parse_args()
 
     main(args)

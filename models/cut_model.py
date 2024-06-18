@@ -255,7 +255,6 @@ class CUTModel(BaseGanModel):
         if self.isTrain:
             # Discriminator(s)
             self.netDs = gan_networks.define_D(**vars(opt))
-
             self.discriminators_names = [
                 "D_B_" + D_name for D_name in self.netDs.keys()
             ]
@@ -534,7 +533,11 @@ class CUTModel(BaseGanModel):
 
     def data_dependent_initialize_semantic_prompt(self, data):
 
-        visual_names_prompt_B = ["real_B_prompt_img", "real_A2B_prompt_img"]
+        visual_names_prompt_B = [
+            "real_B_prompt_img",
+            "real_A2B_prompt_img",
+            "fake_A2B_prompt_img",
+        ]
         self.visual_names += [visual_names_prompt_B]
 
     def inference(self, nb_imgs, offset=0):

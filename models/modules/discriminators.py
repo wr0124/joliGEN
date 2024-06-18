@@ -100,13 +100,17 @@ class NLayerDiscriminator(nn.Module):
         if use_dropout:
             sequence += [nn.Dropout(0.5)]
 
-        sequence += [
-            spectral_norm(
-                nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw),
-                use_spectral,
-            )
-        ]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
+        self.conv1 = spectral_norm(
+            nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw),
+            use_spectral,
+        )
+        # output 1 channel prediction map
+        self.conv2 = spectral_norm(
+            nn.Conv2d(ndf * nf_mult, 4, kernel_size=kw, stride=1, padding=0),
+            use_spectral,
+        )
+        # output prediction class
 
     def forward(self, input):
         """Standard forward."""
@@ -115,7 +119,9 @@ class NLayerDiscriminator(nn.Module):
         else:
             x = input
         x = self.model(x)
-        return x
+        out_src = self.conv1(x)
+        out_cls = self.conv2(x)
+        return out_src, out_cls  # .view(out_cls.size(0), out_cls.size(1))
 
 
 class PixelDiscriminator(nn.Module):

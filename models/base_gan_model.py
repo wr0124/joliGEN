@@ -335,6 +335,31 @@ class BaseGanModel(BaseModel):
 
         return current_APA_prob
 
+    def process_prompt(self):
+        prompt_to_label = {
+            "driving in foggy weather": 0,
+            "driving in cloudy weather": 1,
+            "driving in rainy weather": 2,
+            "driving in snowy weather": 3,
+        }
+        prompt = self.real_B_prompt[0]
+        if prompt not in prompt_to_label:
+            raise ValueError(f"Unknown prompt: {prompt}")
+
+        D_cls = prompt_to_label[prompt]
+        batch_size, _, height, width = self.real_B.shape
+        label_tensor = torch.full(
+            (batch_size, 1, height, width), D_cls, dtype=self.real_B.dtype
+        ).to(self.device)
+        real_B_with_label = torch.cat(
+            (self.real_B.clone().detach(), label_tensor), dim=1
+        )
+        fake_B_with_label = torch.cat(
+            (self.fake_B.clone().detach(), label_tensor), dim=1
+        )
+
+        return D_cls, real_B_with_label, fake_B_with_label
+
     def compute_D_loss_generic(
         self, netD, domain_img, loss, real_name=None, fake_name=None
     ):
@@ -347,9 +372,12 @@ class BaseGanModel(BaseModel):
             context = "_with_context"
 
         if fake_name is None:
-            fake = getattr(self, "fake_" + domain_img + "_pool").query(
-                getattr(self, "fake_" + domain_img + context + noisy)
-            )
+            if self.opt.G_multiprompt:
+                fake = None
+            else:
+                fake = getattr(self, "fake_" + domain_img + "_pool").query(
+                    getattr(self, "fake_" + domain_img + context + noisy)
+                )
         else:
             fake = getattr(self, fake_name)
 
@@ -371,9 +399,24 @@ class BaseGanModel(BaseModel):
             real = real.expand(-1, 3, -1, -1)
             if fake_2 is not None:
                 fake_2 = fake_2.expand(-1, 3, -1, -1)
+        ##change real fake with D_cls
+        if self.opt.G_multiprompt:
+            D_cls, real_B_with_label, fake_B_with_label = self.process_prompt()
+            fake_B_with_label_query = getattr(
+                self, "fake_" + domain_img + "_pool"
+            ).query(fake_B_with_label)
+            with torch.cuda.amp.autocast(enabled=self.with_amp):
+                loss = loss.compute_loss_D(
+                    netD,
+                    real_B_with_label.to(self.device),
+                    fake_B_with_label_query.to(self.device),
+                    fake_2,
+                    D_cls,
+                )
+        else:
+            with torch.cuda.amp.autocast(enabled=self.with_amp):
+                loss = loss.compute_loss_D(netD, real, fake, fake_2)
 
-        with torch.cuda.amp.autocast(enabled=self.with_amp):
-            loss = loss.compute_loss_D(netD, real, fake, fake_2)
         return loss
 
     def compute_D_loss(self):
@@ -406,6 +449,7 @@ class BaseGanModel(BaseModel):
                 loss_value = torch.zeros([], device=self.device)
 
             loss_name = "loss_" + discriminator.loss_name_D
+            print("loss_name_D ", discriminator.loss_name_D)
 
             setattr(
                 self,
@@ -448,7 +492,9 @@ class BaseGanModel(BaseModel):
         if self.opt.data_image_bits != 8 and type(netD) == ProjectedDiscriminator:
             fake = fake.expand(-1, 3, -1, -1)
             real = real.expand(-1, 3, -1, -1)
-        loss = loss.compute_loss_G(netD, real, fake)
+        # TODg
+        print("base_gan_modelpy self  netD real fake ", self.process_prompt()[0])
+        loss = loss.compute_loss_G(netD, real, fake, self.process_prompt()[0])
         return loss
 
     def compute_G_loss(self):
@@ -487,7 +533,7 @@ class BaseGanModel(BaseModel):
                 loss_value = torch.zeros([], device=self.device)
 
             loss_name = "loss_" + discriminator.loss_name_G
-
+            print("loss name and value ", loss_name, loss_value)
             setattr(
                 self,
                 loss_name,

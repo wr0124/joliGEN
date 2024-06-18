@@ -615,6 +615,7 @@ class BaseModel(ABC):
 
     def forward(self):
         for forward_function in self.forward_functions:
+            print("base_model  forward_function ", forward_function)
             getattr(self, forward_function)()
 
     def compute_fake_with_context(self, fake_name, real_name):
@@ -1341,6 +1342,11 @@ class BaseModel(ABC):
 
     def forward_semantic_mask(self):
         d = 1
+        if self.opt.G_netG == "img2img_turbo":
+            image_numpy_fake_B = tensor2im(self.fake_B)
+            image_fakeB_text = add_text2image(image_numpy_fake_B, self.real_B_prompt[0])
+            image_tensor = im2tensor(image_fakeB_text).unsqueeze(0)
+            self.fake_A2B_prompt_img = image_tensor
 
         if self.opt.f_s_net == "sam":
             self.pred_f_s_real_A = predict_sam(

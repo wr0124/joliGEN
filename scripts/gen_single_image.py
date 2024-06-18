@@ -140,9 +140,9 @@ def inference(args):
 
     if args.compare:
         if original_img.shape != out_img.shape:
-            original_img_resize = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
+            # original_img_resize = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
             original_img = cv2.resize(
-                original_img_resize,
+                original_img,
                 (img_width, img_height),
                 interpolation=cv2.INTER_CUBIC,
             )

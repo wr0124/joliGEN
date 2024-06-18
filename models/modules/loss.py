@@ -280,12 +280,11 @@ class DiscriminatorGANLoss(DiscriminatorLoss):
             target_real_label = 1.0
 
         self.gan_mode = train_gan_mode
-
         self.criterionGAN = GANLoss(
             self.gan_mode, target_real_label=target_real_label
         ).to(self.device)
 
-    def compute_loss_D(self, netD, real, fake, fake_2):
+    def compute_loss_D(self, netD, real, fake, fake_2, prompt_class=None):
         """Calculate GAN loss for the discriminator
         Parameters:
             netD (network)      -- the discriminator D
@@ -296,20 +295,64 @@ class DiscriminatorGANLoss(DiscriminatorLoss):
         """
         super().compute_loss_D(netD, real, fake, fake_2)
         # Real
-        self.pred_real = netD(self.real)
-        self.loss_D_real = self.criterionGAN(self.pred_real, True)
+        unique_real_cls = torch.unique(self.real[:, 3:4, :, :])
+        unique_fake_cls = torch.unique(self.fake[:, 3:4, :, :])
+        if unique_real_cls.size(0) == 1:
+            real_cls = int(unique_real_cls.item())
+        if unique_fake_cls.size(0) == 1:
+            fake_cls = int(unique_fake_cls.item())
+        print("real_cls fake_cls ", real_cls, fake_cls)
+        self.real = self.real[:, :3, :, :]
+        self.fake = self.fake[:, :3, :, :]
+        self.pred_real_img, self.pred_real_cls = netD(self.real)
+        self.loss_D_real_img = self.criterionGAN(self.pred_real_img, True)
+
+        if prompt_class is not None:
+            batch, cls, hei, wei = self.pred_real_cls.shape
+            target_tensor = torch.full((1, hei, wei), real_cls, dtype=torch.long)
+            CE_loss = nn.CrossEntropyLoss()
+            loss_D_real_cls = CE_loss(
+                self.pred_real_cls, target_tensor.to(self.pred_real_cls.device)
+            )
+            print("loss_D_real_cls", loss_D_real_cls)
+            self.loss_D_real = self.loss_D_real_img + loss_D_real_cls
+        else:
+            self.loss_D_real = loss_D_real_img
         # Fake
         lambda_loss = 0.5
-        pred_fake = netD(self.fake.detach())
-        loss_D_fake = self.criterionGAN(pred_fake, False)
+        pred_fake_img, pred_fake_cls = netD(self.fake.detach())
+        loss_D_fake_img = self.criterionGAN(pred_fake_img, False)
+
+        if prompt_class is not None:
+            batch, cls, hei, wei = pred_fake_cls.shape
+            target_tensor = torch.full((1, hei, wei), fake_cls, dtype=torch.long)
+            CE_loss = nn.CrossEntropyLoss()
+            loss_D_fake_cls = CE_loss(
+                pred_fake_cls, target_tensor.to(pred_fake_cls.device)
+            )
+            loss_D_fake = loss_D_fake_img + loss_D_fake_cls
+            print("loss_D_fake_cls ", loss_D_fake_cls)
+        else:
+            loss_D_fake = loss_D_fake_img
+
         # Combined loss and calculate gradients
         loss_D = (self.loss_D_real + loss_D_fake) * lambda_loss
         return loss_D
 
-    def compute_loss_G(self, netD, real, fake):
+    def compute_loss_G(self, netD, real, fake, prompt_class=None):
         super().compute_loss_G(netD, real, fake)
-        pred_fake = netD(self.fake)
-        loss_D_fake = self.criterionGAN(pred_fake, True, relu=False)
+        pred_fake, pred_cls = netD(self.fake)
+        loss_D_fake_img = self.criterionGAN(pred_fake, True, relu=False)
+
+        if prompt_class is not None:
+            batch, cls, hei, wei = pred_cls.shape
+            target_tensor = torch.full((1, hei, wei), prompt_class, dtype=torch.long)
+            CE_loss = nn.CrossEntropyLoss()
+            loss_D_fake_cls = CE_loss(pred_cls, target_tensor.to(pred_cls.device))
+            loss_D_fake = loss_D_fake_img + loss_D_fake_cls
+            print("loss_G_cls", loss_D_fake_cls)
+        else:
+            loss_D_fake = loss_D_fake_img
         return loss_D_fake
 
     def update(self, niter):
