@@ -102,7 +102,7 @@ def define_G(
         if alg_diffusion_ddpm_cm_ft:
             in_channel = model_input_nc + model_output_nc
         else:
-            in_channel = model_input_nc + model_output_nc
+            in_channel = model_input_nc
         if (
             alg_diffusion_cond_embed != "" and alg_diffusion_cond_embed != "y_t"
         ) or alg_diffusion_task == "pix2pix":
@@ -267,12 +267,6 @@ def define_G(
                 opt, "G_vit_in_context_start", base.get("in_context_start", 4)
             ),
         }
-        #        model = JiT(
-        #                input_size=data_crop_size,
-        #                in_channels=in_channel,
-        #                num_classes=getattr(opt, "G_vit_num_classes", base.get("num_classes", 1)),
-        #                **cfg,
-        #                )
         cond_embed_dim = getattr(
             opt, "alg_diffusion_cond_embed_dim", cfg.get("hidden_size", 768)
         )
