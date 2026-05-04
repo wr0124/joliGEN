@@ -439,26 +439,43 @@ class Visualizer:
             counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
             losses (OrderedDict)  -- training losses stored in the format of (name, float) pairs
         """
+        if not losses:
+            return
+
         if not hasattr(self, "plot_data"):
             self.plot_data = {"X": [], "Y": [], "legend": list(losses.keys())}
+
+        # A continued run can resume from a losses.json written by a different
+        # model/config. Keep the old curves, and fill missing values with NaN
+        # instead of failing on stale legend entries.
+        legend = self.plot_data["legend"]
+        if self.plot_data["Y"] and not isinstance(self.plot_data["Y"][0], list):
+            self.plot_data["Y"] = [[value] for value in self.plot_data["Y"]]
+
+        for loss_name in losses.keys():
+            if loss_name not in legend:
+                legend.append(loss_name)
+                for row in self.plot_data["Y"]:
+                    row.append(np.nan)
+
         self.plot_data["X"].append(epoch + counter_ratio)
-        if len(self.plot_data["legend"]) == 1:
-            self.plot_data["Y"].append(losses[self.plot_data["legend"][0]])
-            X = np.array(self.plot_data["X"])
-            Y = np.array(self.plot_data["Y"])
-        else:
-            self.plot_data["Y"].append([losses[k] for k in self.plot_data["legend"]])
-            X = np.stack(
-                [np.array(self.plot_data["X"])] * len(self.plot_data["legend"]), 1
-            )
-            Y = np.array(self.plot_data["Y"])
+        self.plot_data["Y"].append(
+            [losses.get(loss_name, np.nan) for loss_name in legend]
+        )
+        X = np.stack([np.array(self.plot_data["X"])] * len(legend), 1)
+        Y = np.array(self.plot_data["Y"])
         try:
+            # Resize needed due to a bug in visdom 0.1.8.9
+            if Y.shape[1] == 1:
+                X = X.reshape(X.shape[:1])
+                Y = Y.reshape(Y.shape[:1])
+
             self.vis.line(
                 Y,
                 X,
                 opts={
                     "title": " loss over time",
-                    "legend": self.plot_data["legend"],
+                    "legend": legend,
                     "xlabel": "epoch",
                     "ylabel": "loss",
                 },
